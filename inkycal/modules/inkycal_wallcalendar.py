@@ -97,7 +97,7 @@ class WallCalendar(inkycal_module):
             fonts['NotoSansUI-Regular'], size=self.fontsize
         )
         self.font = ImageFont.truetype(
-            fonts['Caveat-Regular'], size=self.fontsize
+            fonts['NotoSansUI-Regular'], size=self.fontsize
         )
 
         # give an OK message
