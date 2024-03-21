@@ -146,7 +146,6 @@ class WallCalendar(inkycal_module):
         return total_width
     
     def calculate_lines_for_events(self, events, text_width, time_width):
-        print("calculate_lines_for_events: Started")
         
         def wrapped_lines(text, max_line_width):
             words = text.split()
@@ -197,8 +196,6 @@ class WallCalendar(inkycal_module):
                 event['lines_required'] = wrapped_lines(event['title'], max_width)
             print(f"Lines required for event '{event['title']}': {event['lines_required']}")
         
-        print("calculate_lines_for_events: Finished")
-
         
         # Iterate through each event in the list.
         for event in events:
@@ -350,7 +347,7 @@ class WallCalendar(inkycal_module):
         
         while words:
             line = ''
-            print(f"write_event_title: Starting new line. Current line: {current_line}")
+            #print(f"write_event_title: Starting new line. Current line: {current_line}")
         
             if (current_line == 1):
                 width_for_event_title = text_width - time_width
@@ -359,27 +356,27 @@ class WallCalendar(inkycal_module):
 
             # Add words to the line until the maximum line width is reached.
             while words and (self.get_font().getbbox(line + words[0])[2] <= width_for_event_title):
-                print(f"write_event_title: Adding '{words[0]}' to line")
+                #print(f"write_event_title: Adding '{words[0]}' to line")
                 line += words.pop(0) + ' '
 
             # If the line is empty and adding the word exceeds the maximum line width
             if not line and words and (self.get_font().getbbox(words[0])[2] > width_for_event_title):
-                print(f"write_event_title: Word '{words[0]}' exceeds maximum line width, truncating with ellipsis")
+                #print(f"write_event_title: Word '{words[0]}' exceeds maximum line width, truncating with ellipsis")
                 word = words.pop(0)
                 while self.get_font().getbbox(line + word + '...')[2] > width_for_event_title:
                     word = word[:-1]  # Remove one letter at a time
                 line = word + '...'
 
             if current_line == allocated_lines and words:
-                print(f"write_event_title: Last allocated line reached, adding ellipsis")
+                #print(f"write_event_title: Last allocated line reached, adding ellipsis")
                 line = line.rstrip() + '...'
             
             lines.append(line)
-            print(f"write_event_title: Completed line '{line}'")
+            #print(f"write_event_title: Completed line '{line}'")
             current_line += 1
         
             if current_line > allocated_lines:
-                print("write_event_title: Exceeded allocated lines, breaking")
+                #print("write_event_title: Exceeded allocated lines, breaking")
                 break
         
         print(f"write_event_title: Final lines: {lines}")
@@ -568,14 +565,16 @@ class WallCalendar(inkycal_module):
             events_on_this_day = [event for event in self.month_events if event['begin'].format('YYYY-MM-DD') == date.format('YYYY-MM-DD')]
 
             # Find the width of the longest time for the day
-            time_width = max([self.calculate_time_width(event['begin']) for event in events_on_this_day]);
+            time_width = max([self.calculate_time_width(event['begin']) for event in events_on_this_day], default=0);
+
+            print(f"DEBUG_KLB #### time_width: {time_width} events:{events_on_this_day}")
 
             width_for_event_title = day_width - time_width - (self.padding_day_width * 2)
             text_width = day_width - (self.padding_day_width * 2)
             self.calculate_lines_for_events(events_on_this_day, text_width, time_width)
             self.allocate_lines(events_on_this_day, max_number_of_lines)
             # Add the combined data to the array
-            combined_data.append({'date': date, 'origin': origin, 'events': events_on_this_day})
+            combined_data.append({'date': date, 'origin': origin, 'events': events_on_this_day, 'time_width': time_width})
         
         for data in combined_data:
             print(f"Date: {data['date']}, Origin: {data['origin']}, Events: {data['events']}")
@@ -602,7 +601,7 @@ class WallCalendar(inkycal_module):
                         im_black, 
                         data['origin'], 
                         event, 
-                        time_width, 
+                        data['time_width'], 
                         line_height, 
                         space_above_event
                     )
@@ -610,7 +609,7 @@ class WallCalendar(inkycal_module):
                         im_black, 
                         data['origin'], 
                         event, 
-                        time_width,
+                        data['time_width'],
                         text_width, 
                         line_height, 
                         space_above_event
