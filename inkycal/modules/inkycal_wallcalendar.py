@@ -59,6 +59,11 @@ class WallCalendar(inkycal_module):
             "options": [True, False],
             "default": True,
         },
+        "wrap_column": {
+            "label": "Use separate columns for times and event descriptions? (default = False)",
+            "options": [True, False],
+            "default": False,
+        }
     }
 
     def __init__(self, config):
@@ -72,6 +77,12 @@ class WallCalendar(inkycal_module):
         self._upcoming_events = None
         self._days_with_events = None
 
+        # Constants
+        self.date_height = 30
+        self.padding_day_width = 4
+        self.padding_time = 4
+        self.wrap_indent = 10
+
         # optional parameters
         self.weekstart = config['week_starts_on']
         self.date_format = config["date_format"]
@@ -80,6 +91,10 @@ class WallCalendar(inkycal_module):
         self.mark_previous_days = config['mark_previous_days']
         self.number_of_weeks = config['number_of_weeks']
         self.shade_the_weekend = config['shade_weekend']
+        self.wrap_column = config['wrap_column']
+
+        self.font = "NotoSansUI"
+        self.font_size = int(config["fontsize"])
 
         if config['ical_urls'] and isinstance(config['ical_urls'], str):
             self.ical_urls = config['ical_urls'].split(',')
@@ -93,12 +108,6 @@ class WallCalendar(inkycal_module):
 
         # additional configuration
         self.timezone = get_system_tz()
-        self.num_font = ImageFont.truetype(
-            fonts['NotoSansUI-Regular'], size=self.fontsize
-        )
-        self.font = ImageFont.truetype(
-            fonts['NotoSansUI-Regular'], size=self.fontsize
-        )
 
         # give an OK message
         print(f'{__name__} loaded')
@@ -125,16 +134,18 @@ class WallCalendar(inkycal_module):
         
         return num_lines
     
-    def calculate_time_width(self, time_string="00:00"):
+    def calculate_time_width(self, time):
+        time_string = time.format(self.time_format);
+        font = self.get_font(style="Bold", size=self.font_size)
+
         # Measure the width of the time string
-        text_width = self.font.getbbox(time_string)[2] - self.font.getbbox(time_string)[0]
+        text_width = font.getbbox(time_string)[2] - font.getbbox(time_string)[0]
         
-        # Add 10% padding on either side (20% total)
-        total_width = text_width * 1.20
+        total_width = text_width + self.padding_time
         
         return total_width
     
-    def calculate_lines_for_events(self, events, max_width, time_width):
+    def calculate_lines_for_events(self, events, text_width, time_width):
         print("calculate_lines_for_events: Started")
         
         def wrapped_lines(text, max_line_width):
@@ -146,7 +157,7 @@ class WallCalendar(inkycal_module):
                 while words:
                     word = words[0]
                     new_line = line + word + ' '
-                    new_line_width = self.font.getbbox(new_line)[2]
+                    new_line_width = self.get_font().getbbox(new_line)[2]
             
                     if new_line_width <= max_line_width:
                         # Add word to line and remove it from the list
@@ -166,14 +177,16 @@ class WallCalendar(inkycal_module):
         
         def truncate_word(word, max_width):
             while word:
-                ellipsis_width = self.font.getbbox('...')[2]
-                truncated_word_width = self.font.getbbox(word)[2] + ellipsis_width
+                ellipsis_width = self.get_font().getbbox('...')[2]
+                truncated_word_width = self.get_font().getbbox(word)[2] + ellipsis_width
                 if truncated_word_width <= max_width:
                     return word + '...'
                 word = word[:-1]  # Remove the last character
             
             return '...'  # Return ellipsis if the word is too short to fit
         
+        max_width = text_width - time_width
+
         # Iterate through each event in the list.
         for event in events:
             print(f"Processing event: '{event['title']}'")
@@ -271,7 +284,7 @@ class WallCalendar(inkycal_module):
                 event['lines_allocated'] += additional_lines
                 max_lines -= additional_lines
     
-    def write_allday_event_title(self, image, origin, event, day_width, line_height, space_above_event, day_width_padding):
+    def write_allday_event_title(self, image, origin, event, day_width, line_height, space_above_event):
         x, y = origin  
         x += 2
         y += space_above_event  # Increase y by space_above_event
@@ -285,13 +298,13 @@ class WallCalendar(inkycal_module):
             new_origin,  # tuple of xy coordinates
             (int(day_width), int(height)),  # size of box
             event['title'],  # string containing event title
-            font=self.font,
+            font=self.get_font(),
             autofit=True,
             alignment='center',
             colour='black'
         )
     
-    def write_skipped_event_count(self, image, origin, skipped_count, day_width, line_height, space_above_event, day_width_padding):
+    def write_skipped_event_count(self, image, origin, skipped_count, day_width, line_height, space_above_event):
         x, y = origin  
         x += 2
         y += space_above_event  # Increase y by space_above_event
@@ -302,35 +315,36 @@ class WallCalendar(inkycal_module):
             new_origin,  # tuple of xy coordinates
             (int(day_width), int(height)),  # size of box
             str(skipped_count) + " more events...",  # string 
-            font=self.font,
+            font=self.get_font(),
             autofit=True,
             alignment='center',
             colour='black'
         )
 
-    def write_event_time(self, image, origin, event, time_width, line_height, space_above_event, day_width_padding):
+    def write_event_time(self, image, origin, event, time_width, line_height, space_above_event):
         x, y = origin  
-        x += day_width_padding
+        x += self.padding_day_width
         y += space_above_event  # Increase y by space_above_event
         new_origin = (int(x), int(y))
         write(
             image,
             new_origin,  # tuple of xy coordinates
             (int(time_width), int(line_height*1.2)),  # size of box
-            event['begin'].format('HH:mm'),  # string containing event time
-            font=self.font,
+            event['begin'].format(self.time_format),  # string containing event time
+            font=self.get_font(style="Bold"),
             autofit=False,
             alignment='left'
         )
     
-    def write_event_title(self, image, origin, event, time_width, width_for_event_title, line_height, space_above_event, day_width_padding):
+    def write_event_title(self, image, origin, event, time_width, text_width, line_height, space_above_event):
         print(f"write_event_title: Starting for event '{event['title']}'")
         
         words = event['title'].split()
         lines = []
         allocated_lines = event['lines_allocated']  # Number of lines allocated for this event
         current_line = 1  # Initialize a counter for the current line
-        
+        width_for_event_title = text_width - time_width
+
         print(f"write_event_title: Words to process: {words}")
         print(f"write_event_title: Allocated lines: {allocated_lines}")
         
@@ -338,16 +352,21 @@ class WallCalendar(inkycal_module):
             line = ''
             print(f"write_event_title: Starting new line. Current line: {current_line}")
         
+            if (current_line == 1):
+                width_for_event_title = text_width - time_width
+            else:
+                width_for_event_title = text_width
+
             # Add words to the line until the maximum line width is reached.
-            while words and (self.font.getbbox(line + words[0])[2] <= width_for_event_title):
+            while words and (self.get_font().getbbox(line + words[0])[2] <= width_for_event_title):
                 print(f"write_event_title: Adding '{words[0]}' to line")
                 line += words.pop(0) + ' '
 
             # If the line is empty and adding the word exceeds the maximum line width
-            if not line and words and (self.font.getbbox(words[0])[2] > width_for_event_title):
+            if not line and words and (self.get_font().getbbox(words[0])[2] > width_for_event_title):
                 print(f"write_event_title: Word '{words[0]}' exceeds maximum line width, truncating with ellipsis")
                 word = words.pop(0)
-                while self.font.getbbox(line + word + '...')[2] > width_for_event_title:
+                while self.get_font().getbbox(line + word + '...')[2] > width_for_event_title:
                     word = word[:-1]  # Remove one letter at a time
                 line = word + '...'
 
@@ -372,8 +391,16 @@ class WallCalendar(inkycal_module):
                 print(f"write_event_title: Skipping line {i} as it exceeds allocated lines")
                 break
         
+            if (i == 0):
+                width_for_event_title = text_width - time_width
+            else:
+                width_for_event_title = text_width
+        
             x, y = origin
-            x += day_width_padding + time_width
+            if (i == 0 or self.wrap_column):
+                x += self.padding_day_width + time_width
+            else:
+                x += self.padding_day_width + self.wrap_indent
             y += space_above_event + event_line_offset
             new_origin = (int(x), int(y))
             print(f"write_event_title: Writing line '{line}' at {new_origin}")
@@ -384,7 +411,7 @@ class WallCalendar(inkycal_module):
                 new_origin,
                 (int(width_for_event_title), int(line_height*1.2)),
                 line,
-                font=self.font,
+                font=self.get_font(),
                 autofit=False,
                 alignment='left'
             )
@@ -398,8 +425,6 @@ class WallCalendar(inkycal_module):
         
         # Set the number of weeks to display in the calendar
         num_weeks = self.number_of_weeks
-        date_height = 30
-        day_width_padding = 5
         
         # Calculate the image dimensions taking into account padding
         im_width = int(self.height - (2 * self.padding_left))
@@ -429,7 +454,7 @@ class WallCalendar(inkycal_module):
             (0, 0),
             (im_width, month_name_height),
             str(now.format('MMMM', locale=self.language)),
-            font=self.num_font,
+            font=self.get_font(),
             autofit=True,
         )
         
@@ -472,7 +497,7 @@ class WallCalendar(inkycal_module):
                 (int(index * day_width), int(im_height * 0.1)),
                 (int(day_width), int(day_name_height)),
                 weekday_names[index],
-                font=self.font,
+                font=self.get_font(),
                 autofit=True,
                 fill_height=0.5,
             )
@@ -505,20 +530,18 @@ class WallCalendar(inkycal_module):
             write(
                 im_black,
                 new_origin,  # tuple of xy coordinates
-                (int(day_width), date_height),  # size of box
+                (int(day_width), self.date_height),  # size of box
                 date_str,  # string containing the day of the month
-                font=self.num_font,
+                font=self.get_font(),
                 autofit=True,
                 fill_height=0.8,
                 alignment='left'
             )
         
 
-        events_allowed_height = day_height - date_height
-        line_height = self.font.getbbox("AWgp")[3] * 1.05
+        events_allowed_height = day_height - self.date_height
+        line_height = self.get_font().getbbox("AWgp")[3] * 1.05
         max_number_of_lines = self.calculate_max_lines(events_allowed_height, line_height)
-        time_width = self.calculate_time_width()
-        width_for_event_title = day_width - time_width - (day_width_padding * 2)
         
         from inkycal.modules.ical_parser import iCalendar
         # fetch events from given icalendars
@@ -543,14 +566,20 @@ class WallCalendar(inkycal_module):
             origin = day_origins[index]
             # Find events starting on this date
             events_on_this_day = [event for event in self.month_events if event['begin'].format('YYYY-MM-DD') == date.format('YYYY-MM-DD')]
-            self.calculate_lines_for_events(events_on_this_day, width_for_event_title, time_width)
+
+            # Find the width of the longest time for the day
+            time_width = max([self.calculate_time_width(event['begin']) for event in events_on_this_day]);
+
+            width_for_event_title = day_width - time_width - (self.padding_day_width * 2)
+            text_width = day_width - (self.padding_day_width * 2)
+            self.calculate_lines_for_events(events_on_this_day, text_width, time_width)
             self.allocate_lines(events_on_this_day, max_number_of_lines)
             # Add the combined data to the array
             combined_data.append({'date': date, 'origin': origin, 'events': events_on_this_day})
         
         for data in combined_data:
             print(f"Date: {data['date']}, Origin: {data['origin']}, Events: {data['events']}")
-            space_above_event = date_height
+            space_above_event = self.date_height
             data['future_skipped_count'] = 0
             
             # Sort the events list
@@ -564,8 +593,7 @@ class WallCalendar(inkycal_module):
                         event,
                         day_width, 
                         line_height, 
-                        space_above_event,
-                        day_width_padding
+                        space_above_event
                     )
                     space_above_event += event['lines_allocated'] * line_height
                 
@@ -576,18 +604,16 @@ class WallCalendar(inkycal_module):
                         event, 
                         time_width, 
                         line_height, 
-                        space_above_event,
-                        day_width_padding
+                        space_above_event
                     )
                     self.write_event_title(
                         im_black, 
                         data['origin'], 
                         event, 
                         time_width,
-                        width_for_event_title, 
+                        text_width, 
                         line_height, 
-                        space_above_event,
-                        day_width_padding
+                        space_above_event
                     )
                     space_above_event += event['lines_allocated'] * line_height
                 
@@ -602,8 +628,7 @@ class WallCalendar(inkycal_module):
                         data['future_skipped_count'], 
                         day_width, 
                         line_height, 
-                        space_above_event, 
-                        day_width_padding
+                        space_above_event
                     )
                 
                 
@@ -630,6 +655,25 @@ class WallCalendar(inkycal_module):
         # Return the final images
         return im_black, im_colour
 
+
+    def get_font(self, style="Regular", size=None):
+        """ 
+        Return a truetype font object for a given style and size
+        Valid styles: Regular, Bold, Italic, BoldItalic
+        """
+        if size is None:
+            size = self.font_size
+
+        if self.font == "NotoSansUI":
+            # Use the styles directly
+            pass
+        elif self.font == "NotoSans":
+            if style == "Regular":
+                style = "SemiCondensed"
+            elif style == "Bold":
+                style = "SemiCondensedSemiBold"
+
+        return ImageFont.truetype(fonts[f"{self.font}-{style}"], size=size)
 
 if __name__ == '__main__':
     print(f'running {__name__} in standalone mode')
