@@ -58,13 +58,22 @@ find_dirs = [
     '/usr/lib',
 ]
 spi = None
+
+# Determine if executable is 32-bit or 64-bit
+import sys
+is_64bit = (sys.maxsize > 2**32)
+if (is_64bit):
+    libname = 'epd_12_in_48_lib_64.so'
+else:
+    libname = 'epd_12_in_48_lib_32.so'
+
 for find_dir in find_dirs:
-    so_filename = os.path.join(find_dir, 'epd_12_in_48_lib.so')
+    so_filename = os.path.join(find_dir, libname)
     if os.path.exists(so_filename):
         spi = CDLL(so_filename)
         break
 if spi is None:
-    RuntimeError('Cannot find epd_12_in_48_lib.so')
+    RuntimeError(f'Cannot find {libname}')
 
 
 def digital_write(pin, value):
